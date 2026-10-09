@@ -50,6 +50,18 @@ export function isPrivateIp(ipStr) {
   return false;
 }
 
+// Known cloud metadata and restricted internal hostnames (defense in depth)
+const RESTRICTED_HOSTNAMES = [
+  'localhost',
+  'metadata.google.internal',
+  'metadata.nic.google',
+  '169.254.169.254',
+  'instance-data',
+  '169.254.169.254.xip.io',
+  'metadata.aws.internal',
+  'metadata.azure.internal',
+];
+
 /**
  * Validates and normalizes a company URL.
  * Performs robust SSRF validation against IP literals (hex/decimal/octal/IPv6/bracketed)
@@ -98,10 +110,10 @@ export async function validateAndNormalizeUrlAsync(inputUrl) {
 
   // 1. Check known metadata / internal hostnames
   if (
-    hostname === 'localhost' ||
-    hostname === 'metadata.google.internal' ||
+    RESTRICTED_HOSTNAMES.includes(hostname) ||
     hostname.endsWith('.internal') ||
-    hostname.endsWith('.local')
+    hostname.endsWith('.local') ||
+    hostname.endsWith('.localhost')
   ) {
     throw new Error('INVALID_URL: Private, loopback, or internal URLs are restricted.');
   }
@@ -111,7 +123,6 @@ export async function validateAndNormalizeUrlAsync(inputUrl) {
     if (isPrivateIp(hostname)) {
       throw new Error('INVALID_URL: Private, loopback, or internal IP addresses are restricted.');
     }
-    // Block IP literals if required or allow public IP literals.
     return parsed.toString();
   }
 
@@ -132,7 +143,6 @@ export async function validateAndNormalizeUrlAsync(inputUrl) {
     if (dnsErr.message.startsWith('INVALID_URL:')) {
       throw dnsErr;
     }
-    // If DNS resolution fails (e.g., NXDOMAIN or offline/test network issue), log or throw invalid domain
     throw new Error(`INVALID_URL: Could not resolve domain name "${hostname}".`);
   }
 
@@ -141,16 +151,27 @@ export async function validateAndNormalizeUrlAsync(inputUrl) {
 
 /**
  * Synchronous validation for fast fallback/basic checks.
+ * Delegates to validateAndNormalizeUrlAsync or performs strict pattern & IP checks.
  */
 export function validateAndNormalizeUrl(inputUrl) {
   if (!inputUrl || typeof inputUrl !== 'string' || !inputUrl.trim()) {
     return null;
   }
 
-  let normalized = inputUrl.trim();
-  if (!/^https?:\/\//i.test(normalized)) {
-    normalized = 'https://' + normalized;
+  let raw = inputUrl.trim();
+  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(raw)) {
+    try {
+      const parsedTest = new URL(raw);
+      if (!['http:', 'https:'].includes(parsedTest.protocol)) {
+        throw new Error(`INVALID_URL: Protocol "${parsedTest.protocol}" is not allowed.`);
+      }
+    } catch (err) {
+      if (err.message.startsWith('INVALID_URL:')) throw err;
+      throw new Error(`INVALID_URL: Invalid URL format.`);
+    }
   }
+
+  let normalized = /^https?:\/\//i.test(raw) ? raw : 'https://' + raw;
 
   let parsed;
   try {
@@ -169,10 +190,10 @@ export function validateAndNormalizeUrl(inputUrl) {
   }
 
   if (
-    hostname === 'localhost' ||
-    hostname === 'metadata.google.internal' ||
+    RESTRICTED_HOSTNAMES.includes(hostname) ||
     hostname.endsWith('.internal') ||
-    hostname.endsWith('.local')
+    hostname.endsWith('.local') ||
+    hostname.endsWith('.localhost')
   ) {
     throw new Error('INVALID_URL: Private, loopback, or internal URLs are restricted.');
   }
@@ -181,6 +202,10 @@ export function validateAndNormalizeUrl(inputUrl) {
     if (isPrivateIp(hostname)) {
       throw new Error('INVALID_URL: Private, loopback, or internal IP addresses are restricted.');
     }
+  }
+
+  if (!hostname.includes('.')) {
+    throw new Error('INVALID_URL: URL must be a public domain name.');
   }
 
   return parsed.toString();

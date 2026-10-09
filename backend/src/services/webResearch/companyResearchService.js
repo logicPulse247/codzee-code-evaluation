@@ -1,4 +1,4 @@
-import { validateAndNormalizeUrl } from '../crawler/urlUtils.js';
+import { validateAndNormalizeUrlAsync } from '../crawler/urlUtils.js';
 import { isUrlAllowedByRobots } from '../crawler/robotsChecker.js';
 import { parsePageHtml } from '../crawler/cheerioParser.js';
 import { fetchWithRetryAndRateLimit } from '../crawler/fetcher.js';
@@ -30,7 +30,7 @@ export async function researchCompany(companyUrl) {
 
   let targetUrl;
   try {
-    targetUrl = validateAndNormalizeUrl(companyUrl);
+    targetUrl = await validateAndNormalizeUrlAsync(companyUrl);
   } catch (err) {
     logger.warn(`[Company Research] URL validation failed: ${err.message}`);
     return {

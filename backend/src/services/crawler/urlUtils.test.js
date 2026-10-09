@@ -44,9 +44,11 @@ describe('urlUtils - SSRF Validation', () => {
       expect(result).toBe('https://google.com/');
     });
 
-    it('blocks internal hostnames and localhost', async () => {
+    it('blocks internal hostnames, metadata endpoints, and localhost', async () => {
       await expect(validateAndNormalizeUrlAsync('http://localhost:5000')).rejects.toThrow('Private, loopback, or internal URLs are restricted.');
       await expect(validateAndNormalizeUrlAsync('http://metadata.google.internal')).rejects.toThrow('Private, loopback, or internal URLs are restricted.');
+      await expect(validateAndNormalizeUrlAsync('http://169.254.169.254/latest/meta-data')).rejects.toThrow('Private, loopback, or internal URLs are restricted.');
+      await expect(validateAndNormalizeUrlAsync('http://instance-data/')).rejects.toThrow('Private, loopback, or internal URLs are restricted.');
     });
 
     it('blocks bracketed IPv6 loopback [::1]', async () => {
