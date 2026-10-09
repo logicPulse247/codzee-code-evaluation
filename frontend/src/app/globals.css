@@ -1,10 +1,39 @@
 @import "tailwindcss";
 
+/* ─── Light mode tokens ──────────────────────────────────────────────── */
 :root {
   --background: #f8fafc;
   --foreground: #0f172a;
+  --surface:    #ffffff;
+  --surface-2:  #f1f5f9;
+  --border:     #e2e8f0;
+  --border-2:   #cbd5e1;
+  --muted:      #64748b;
+  --muted-2:    #94a3b8;
+  --accent:     #2563eb;
+  --accent-hover: #1d4ed8;
+  --danger:     #f43f5e;
 }
 
+/* ─── Dark mode tokens ───────────────────────────────────────────────── */
+.dark {
+  --background: #0a0a0f;
+  --foreground: #f8fafc;
+  --surface:    #111318;
+  --surface-2:  #1a1d27;
+  --border:     #2a2d3e;
+  --border-2:   #383b52;
+  --muted:      #94a3b8;
+  --muted-2:    #64748b;
+  --accent:     #3b82f6;
+  --accent-hover: #60a5fa;
+  --danger:     #fb7185;
+}
+
+/* ─── Tailwind v4: dark variant uses .dark class on <html> ───────────── */
+@variant dark (&:where(.dark, .dark *));
+
+/* ─── Base ───────────────────────────────────────────────────────────── */
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -16,4 +45,20 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* ─── Smooth transitions on theme switch ─────────────────────────────── */
+*,
+*::before,
+*::after {
+  transition-property: background-color, border-color, color, fill, stroke;
+  transition-duration: 150ms;
+  transition-timing-function: ease;
+}
+
+/* But don't transition transforms/opacity (breaks animations) */
+[class*="animate-"],
+[class*="transition-"] {
+  transition-property: initial;
 }

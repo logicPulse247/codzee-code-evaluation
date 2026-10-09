@@ -22,7 +22,6 @@ export default function LoginPage() {
     e.preventDefault();
     setError('');
     setIsSubmitting(true);
-
     try {
       await login(email, password);
       router.push('/dashboard');
@@ -34,16 +33,18 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="max-w-sm mx-auto py-16 px-4 font-sans text-slate-900">
-      <div className="bg-white border border-slate-200 rounded-xl p-8 shadow-sm space-y-6">
+    <div className="max-w-sm mx-auto py-16 px-4 font-sans text-slate-900 dark:text-slate-100">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-8 shadow-sm space-y-6">
+
+        {/* Brand */}
         <div className="text-center space-y-2">
           <div className="w-9 h-9 rounded-lg bg-blue-600 text-white flex items-center justify-center mx-auto shadow-md shadow-blue-500/20">
             <Sparkles className="w-5 h-5" />
           </div>
-          <h1 className="text-xl font-bold font-serif text-slate-900 tracking-tight">
+          <h1 className="text-xl font-bold font-serif text-slate-900 dark:text-slate-100 tracking-tight">
             InterviewKit
           </h1>
-          <p className="text-xs font-mono text-slate-500">
+          <p className="text-xs font-mono text-slate-500 dark:text-slate-400">
             Prepare smarter. Interview with confidence.
           </p>
         </div>
@@ -59,7 +60,6 @@ export default function LoginPage() {
             required
             placeholder="user@example.com"
           />
-
           <Input
             label="Password"
             type="password"
@@ -68,21 +68,14 @@ export default function LoginPage() {
             required
             placeholder="••••••••"
           />
-
-          <Button
-            type="submit"
-            variant="primary"
-            size="md"
-            loading={isSubmitting}
-            className="w-full"
-          >
+          <Button type="submit" variant="primary" size="md" loading={isSubmitting} className="w-full">
             Sign In
           </Button>
         </form>
 
-        <div className="pt-2 text-center text-xs font-mono text-slate-500 border-t border-slate-200">
-          <span>Don't have an account? </span>
-          <Link href="/register" className="font-semibold text-blue-600 hover:underline">
+        <div className="pt-2 text-center text-xs font-mono text-slate-500 dark:text-slate-400 border-t border-slate-200 dark:border-slate-700">
+          <span>Don&apos;t have an account? </span>
+          <Link href="/register" className="font-semibold text-blue-600 dark:text-blue-400 hover:underline">
             Create account
           </Link>
         </div>
