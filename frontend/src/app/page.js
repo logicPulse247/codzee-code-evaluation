@@ -14,7 +14,7 @@ import {
   Calendar,
   Zap,
   CheckCircle2,
-  Sliders,
+  AlertTriangle,
   Sparkles,
   Link2,
   ListPlus,
@@ -22,6 +22,107 @@ import {
   X,
   Layers,
 } from 'lucide-react';
+
+// ─── URL Validation ───────────────────────────────────────────────────────────
+// Blocks SSRF vectors: private IPs, loopback, link-local, internal hostnames,
+// non-http(s) schemes, and bare IPs.
+const PRIVATE_IP_PATTERNS = [
+  /^localhost$/i,
+  /^127\.\d+\.\d+\.\d+$/,           // 127.x.x.x loopback
+  /^10\.\d+\.\d+\.\d+$/,            // 10.x.x.x private
+  /^172\.(1[6-9]|2\d|3[01])\.\d+\.\d+$/, // 172.16–31.x.x private
+  /^192\.168\.\d+\.\d+$/,           // 192.168.x.x private
+  /^169\.254\.\d+\.\d+$/,           // 169.254.x.x link-local
+  /^::1$/,                          // IPv6 loopback
+  /^fc00:/i,                        // IPv6 unique local
+  /^fe80:/i,                        // IPv6 link-local
+  /^0\.0\.0\.0$/,
+  /^metadata\.google\.internal$/i,  // GCP metadata
+  /^169\.254\.169\.254$/,           // AWS/Azure metadata endpoint
+];
+
+/**
+ * Validates a company URL for SSRF safety.
+ * Returns null if valid, or an error string if invalid.
+ */
+function validateCompanyUrl(raw) {
+  if (!raw || !raw.trim()) return null; // field is optional — empty is fine
+
+  let parsed;
+  try {
+    // Prepend https:// if no scheme so the URL constructor works
+    const normalised = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+    parsed = new URL(normalised);
+  } catch {
+    return 'Invalid URL format. Example: https://stripe.com/jobs';
+  }
+
+  // Only allow http and https
+  if (!['http:', 'https:'].includes(parsed.protocol)) {
+    return `URL scheme "${parsed.protocol}" is not allowed. Use https://.`;
+  }
+
+  const host = parsed.hostname.toLowerCase();
+
+  // Block bare IPv4 addresses entirely (not just private ones)
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(host)) {
+    return 'IP addresses are not allowed. Please enter a public domain name.';
+  }
+
+  // Block known private/internal hostnames and IP ranges
+  for (const pattern of PRIVATE_IP_PATTERNS) {
+    if (pattern.test(host)) {
+      return 'Private, loopback, or internal URLs are not allowed.';
+    }
+  }
+
+  // Must have at least one dot (e.g. "stripe.com") — blocks bare hostnames like "intranet"
+  if (!host.includes('.')) {
+    return 'URL must be a public domain (e.g. https://stripe.com).';
+  }
+
+  return null; // valid
+}
+
+// ─── CSV Parser (RFC 4180) ────────────────────────────────────────────────────
+// Handles quoted fields that contain commas, newlines, and escaped quotes ("").
+// The original code used a naive line.split(',') which broke on any JD text
+// containing commas inside a quoted field.
+function parseCSVLine(line) {
+  const fields = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+
+    if (inQuotes) {
+      if (ch === '"') {
+        // Peek ahead: "" is an escaped quote, otherwise it ends the quoted field
+        if (i + 1 < line.length && line[i + 1] === '"') {
+          current += '"';
+          i++; // skip the second quote
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        current += ch;
+      }
+    } else {
+      if (ch === '"') {
+        inQuotes = true;
+      } else if (ch === ',') {
+        fields.push(current.trim());
+        current = '';
+      } else {
+        current += ch;
+      }
+    }
+  }
+
+  fields.push(current.trim()); // push the last field
+  return fields;
+}
 
 export default function Home() {
   const router = useRouter();
@@ -33,6 +134,7 @@ export default function Home() {
 
   const [jd, setJd] = useState('');
   const [companyUrl, setCompanyUrl] = useState('');
+  const [companyUrlError, setCompanyUrlError] = useState(''); // inline URL validation error
   const [days, setDays] = useState(7);
   const [seniority, setSeniority] = useState('Senior');
 
@@ -41,14 +143,27 @@ export default function Home() {
   const [stageMessage, setStageMessage] = useState('');
   const [error, setError] = useState('');
 
+  // Validate URL on every change — gives immediate inline feedback
+  const handleCompanyUrlChange = (e) => {
+    const val = e.target.value;
+    setCompanyUrl(val);
+    setCompanyUrlError(validateCompanyUrl(val) || '');
+  };
+
   const handleAddToQueue = () => {
     if (!jd.trim()) {
       setError('Please paste a Job Description before adding to queue.');
       return;
     }
+    const urlErr = validateCompanyUrl(companyUrl);
+    if (urlErr) {
+      setError(`Company URL: ${urlErr}`);
+      return;
+    }
     setQueuedRoles([...queuedRoles, { jd, companyUrl, days }]);
     setJd('');
     setCompanyUrl('');
+    setCompanyUrlError('');
     setError('');
   };
 
@@ -83,8 +198,11 @@ export default function Home() {
             lines[0].toLowerCase().includes('jd') ||
             lines[0].toLowerCase().includes('description');
           const dataLines = hasHeader ? lines.slice(1) : lines;
+
+          // FIX: use RFC 4180 parser instead of naive split(',')
+          // This correctly handles JD text that contains commas inside quoted fields.
           parsedRoles = dataLines.map((line) => {
-            const parts = line.split(',');
+            const parts = parseCSVLine(line);
             return {
               jd: parts[0] || '',
               companyUrl: parts[1] || '',
@@ -95,10 +213,25 @@ export default function Home() {
           throw new Error('Unsupported file format. Please upload JSON or CSV.');
         }
 
-        const validRoles = parsedRoles.filter((r) => r.jd && r.jd.trim());
+        // Filter out roles with invalid/unsafe URLs and warn about them
+        const skipped = [];
+        const validRoles = parsedRoles.filter((r) => {
+          if (!r.jd || !r.jd.trim()) return false;
+          const urlErr = validateCompanyUrl(r.companyUrl);
+          if (urlErr) {
+            skipped.push(`Row skipped — ${urlErr}`);
+            return false;
+          }
+          return true;
+        });
+
+        if (skipped.length > 0) {
+          setError(`${skipped.length} row(s) skipped due to invalid URLs: ${skipped[0]}`);
+        }
+
         if (validRoles.length > 0) {
           setQueuedRoles([...queuedRoles, ...validRoles]);
-          setError('');
+          if (skipped.length === 0) setError('');
         } else {
           setError('No valid roles found in the uploaded file.');
         }
@@ -124,6 +257,12 @@ export default function Home() {
     if (inputMode === 'single') {
       if (!jd.trim()) {
         setError('Please paste a Job Description.');
+        return;
+      }
+      // Validate URL before sending to backend
+      const urlErr = validateCompanyUrl(companyUrl);
+      if (urlErr) {
+        setError(`Company URL: ${urlErr}`);
         return;
       }
       endpoint = '/kits/generate';
@@ -337,14 +476,29 @@ export default function Home() {
             <input
               type="url"
               value={companyUrl}
-              onChange={(e) => setCompanyUrl(e.target.value)}
+              onChange={handleCompanyUrlChange}
               placeholder="https://stripe.com/jobs"
-              className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:border-blue-600 dark:focus:border-blue-500 rounded-lg pl-9 pr-10 py-2.5 text-xs font-mono text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none transition-colors"
+              className={`w-full bg-white dark:bg-slate-800 border rounded-lg pl-9 pr-10 py-2.5 text-xs font-mono text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none transition-colors ${
+                companyUrlError
+                  ? 'border-rose-400 dark:border-rose-600 focus:border-rose-500'
+                  : 'border-slate-200 dark:border-slate-700 focus:border-blue-600 dark:focus:border-blue-500'
+              }`}
             />
-            {companyUrl && (
-              <CheckCircle2 className="w-4 h-4 text-blue-600 dark:text-blue-400 absolute right-3 top-3" />
+            {/* Show check if valid and non-empty, warning icon if invalid */}
+            {companyUrl && !companyUrlError && (
+              <CheckCircle2 className="w-4 h-4 text-emerald-500 absolute right-3 top-3" />
+            )}
+            {companyUrl && companyUrlError && (
+              <AlertTriangle className="w-4 h-4 text-rose-500 absolute right-3 top-3" />
             )}
           </div>
+          {/* Inline validation message */}
+          {companyUrlError && (
+            <p className="text-[11px] font-mono text-rose-600 dark:text-rose-400 flex items-center gap-1">
+              <AlertTriangle className="w-3 h-3 shrink-0" />
+              {companyUrlError}
+            </p>
+          )}
         </div>
 
         {/* Days + Seniority grid */}

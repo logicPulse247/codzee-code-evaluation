@@ -8,7 +8,7 @@ pnpm-debug.log*
 # next.js
 .next/
 out/
-
+test.csv
 # production
 build/
 dist/
