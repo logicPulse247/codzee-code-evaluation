@@ -1,3 +1,6 @@
+import { isPrivateIp } from './urlUtils.js';
+import dns from 'dns/promises';
+import ipaddr from 'ipaddr.js';
 import { logger } from '../../utils/logger.js';
 
 // Domain-level rate limiter timestamps
@@ -23,6 +26,52 @@ async function enforceRateLimit(url) {
 
 export async function fetchWithRetryAndRateLimit(url, options = {}, maxRetries = 2, timeoutMs = 5000) {
   await enforceRateLimit(url);
+
+  // PRE-FETCH SSRF RE-CHECK: Resolve hostname right before request execution
+  // to protect against DNS rebinding (TOCTOU) attacks.
+  try {
+    let hostname = new URL(url).hostname.toLowerCase();
+    if (hostname.startsWith('[') && hostname.endsWith(']')) {
+      hostname = hostname.slice(1, -1);
+    }
+
+    if (ipaddr.isValid(hostname)) {
+      if (isPrivateIp(hostname)) {
+        return {
+          ok: false,
+          status: 403,
+          statusText: 'Forbidden',
+          contentType: '',
+          text: '',
+          error: `SSRF Blocked: Destination IP ${hostname} is private or restricted.`
+        };
+      }
+    } else {
+      const addresses = await dns.lookup(hostname, { all: true });
+      for (const addr of addresses) {
+        if (isPrivateIp(addr.address)) {
+          return {
+            ok: false,
+            status: 403,
+            statusText: 'Forbidden',
+            contentType: '',
+            text: '',
+            error: `SSRF Blocked: Domain ${hostname} resolves to restricted IP ${addr.address}.`
+          };
+        }
+      }
+    }
+  } catch (dnsErr) {
+    logger.debug(`[Crawler] Pre-fetch DNS resolution failed for ${url}: ${dnsErr.message}`);
+    return {
+      ok: false,
+      status: 400,
+      statusText: 'Bad Request',
+      contentType: '',
+      text: '',
+      error: `Could not resolve domain name: ${dnsErr.message}`
+    };
+  }
 
   let attempt = 0;
   let lastError = null;

@@ -6,10 +6,25 @@ import { runSecondPassGeneration } from './stage6_secondPass.js';
 import { allocateSchedule } from '../schedule/scheduleAllocator.js';
 import { generateFlashcards } from './stage8_flashcards.js';
 import { kitSchema } from '../validation/kitSchemas.js';
+import { validateAndNormalizeUrlAsync } from '../crawler/urlUtils.js';
 import { logger } from '../../utils/logger.js';
 
 export async function runKitPipeline({ jd, companyUrl, days = 5, onProgress = () => {} }) {
   const daysAvailable = Math.max(1, Math.min(60, Number(days) || 5));
+
+  let validatedCompanyUrl = companyUrl;
+
+  // Validate company URL server-side against SSRF (private IPs, loopback, hex/dec IPs, internal DNS names)
+  if (companyUrl && typeof companyUrl === 'string' && companyUrl.trim()) {
+    try {
+      validatedCompanyUrl = await validateAndNormalizeUrlAsync(companyUrl);
+    } catch (err) {
+      const msg = err.message.replace(/^INVALID_URL:\s*/, '');
+      const urlErr = new Error(`Company URL validation failed: ${msg}`);
+      urlErr.status = 400;
+      throw urlErr;
+    }
+  }
 
   // Step 1: Requirement Extraction
   await onProgress('ANALYZING_JD', 'Analyzing job description...');
@@ -25,12 +40,12 @@ export async function runKitPipeline({ jd, companyUrl, days = 5, onProgress = ()
   if (isInvalidJd) {
     await onProgress('RESEARCHING_COMPANY', 'Researching company...');
     await onProgress('DISCOVERING_PAGES', 'Discovering relevant pages...');
-    const companyBriefResult = await researchCompany(companyUrl);
+    const companyBriefResult = await researchCompany(validatedCompanyUrl);
 
     await onProgress('VALIDATING_KIT', 'Building honest thin kit (no valid job description)...');
 
     const companyResearchAvailable = companyBriefResult.company_research_available !== false;
-    const companyName = resolveCompanyName(companyUrl, companyBriefResult);
+    const companyName = resolveCompanyName(validatedCompanyUrl, companyBriefResult);
 
     const qualityNote = stage1Result.jd_quality_note
       || 'The text provided does not appear to be a valid job description. No requirements were extracted, so no questions, flashcards, or study schedule could be generated.';
@@ -38,7 +53,7 @@ export async function runKitPipeline({ jd, companyUrl, days = 5, onProgress = ()
     const thinKit = {
       source: {
         company: companyName,
-        company_url: companyUrl || '',
+        company_url: validatedCompanyUrl || '',
         role: 'Unknown Role',
         location: '',
         jd_chars: (jd || '').length,
@@ -91,13 +106,10 @@ export async function runKitPipeline({ jd, companyUrl, days = 5, onProgress = ()
   // Step 2: Company Crawl & Research
   await onProgress('RESEARCHING_COMPANY', 'Researching company...');
   await onProgress('DISCOVERING_PAGES', 'Discovering relevant pages...');
-  const companyBriefResult = await researchCompany(companyUrl);
+  const companyBriefResult = await researchCompany(validatedCompanyUrl);
 
   // Step 3: Public Interview Process Research
   await onProgress('SEARCHING_DISCUSSIONS', 'Searching public interview discussions...');
-  // Use the LLM-extracted role title, but never the generic heuristic fallback "Software Engineer"
-  // which fires when the LLM is unavailable. Pass the raw JD text so the research service
-  // can classify the role itself from the actual job description.
   const roleHint = (
     stage1Result.role_title &&
     stage1Result.role_title !== 'Unspecified Role' &&
@@ -106,15 +118,14 @@ export async function runKitPipeline({ jd, companyUrl, days = 5, onProgress = ()
   ) ? stage1Result.role_title : '';
   const companyWebFallbackText = companyBriefResult.what_they_do || companyBriefResult.summary || '';
 
-  // Derive the best available company name to pass explicitly to the research service.
-  const resolvedCompanyName = resolveCompanyName(companyUrl, companyBriefResult);
+  const resolvedCompanyName = resolveCompanyName(validatedCompanyUrl, companyBriefResult);
 
   const interviewResearchResult = await researchPublicInterviewProcess(
-    companyUrl,
+    validatedCompanyUrl,
     companyWebFallbackText,
     roleHint,
-    resolvedCompanyName,  // 4th arg: explicit name, avoids naive URL parsing
-    jd                    // 5th arg: raw JD text for accurate role classification
+    resolvedCompanyName,
+    jd
   );
 
   // Step 4: Initial Question Generation
