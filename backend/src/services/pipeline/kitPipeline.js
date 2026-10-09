@@ -6,10 +6,23 @@ import { runSecondPassGeneration } from './stage6_secondPass.js';
 import { allocateSchedule } from '../schedule/scheduleAllocator.js';
 import { generateFlashcards } from './stage8_flashcards.js';
 import { kitSchema } from '../validation/kitSchemas.js';
+import { validateAndNormalizeUrlAsync } from '../crawler/urlUtils.js';
 import { logger } from '../../utils/logger.js';
 
 export async function runKitPipeline({ jd, companyUrl, days = 5, onProgress = () => {} }) {
   const daysAvailable = Math.max(1, Math.min(60, Number(days) || 5));
+
+  // Validate company URL server-side against SSRF (private IPs, loopback, hex/dec IPs, internal DNS names)
+  if (companyUrl && typeof companyUrl === 'string' && companyUrl.trim()) {
+    try {
+      await validateAndNormalizeUrlAsync(companyUrl);
+    } catch (err) {
+      const msg = err.message.replace(/^INVALID_URL:\s*/, '');
+      const urlErr = new Error(`Company URL validation failed: ${msg}`);
+      urlErr.status = 400;
+      throw urlErr;
+    }
+  }
 
   // Step 1: Requirement Extraction
   await onProgress('ANALYZING_JD', 'Analyzing job description...');

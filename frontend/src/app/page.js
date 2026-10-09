@@ -25,7 +25,7 @@ import {
 
 // ─── URL Validation ───────────────────────────────────────────────────────────
 // Blocks SSRF vectors: private IPs, loopback, link-local, internal hostnames,
-// non-http(s) schemes, and bare IPs.
+// non-http(s) schemes, bare IPs, hex/octal/decimal IPs, and bracketed IPv6 addresses.
 const PRIVATE_IP_PATTERNS = [
   /^localhost$/i,
   /^127\.\d+\.\d+\.\d+$/,           // 127.x.x.x loopback
@@ -34,11 +34,15 @@ const PRIVATE_IP_PATTERNS = [
   /^192\.168\.\d+\.\d+$/,           // 192.168.x.x private
   /^169\.254\.\d+\.\d+$/,           // 169.254.x.x link-local
   /^::1$/,                          // IPv6 loopback
+  /^0:0:0:0:0:0:0:1$/,              // IPv6 uncompressed loopback
   /^fc00:/i,                        // IPv6 unique local
   /^fe80:/i,                        // IPv6 link-local
   /^0\.0\.0\.0$/,
   /^metadata\.google\.internal$/i,  // GCP metadata
   /^169\.254\.169\.254$/,           // AWS/Azure metadata endpoint
+  /^0x[0-9a-f]+/i,                  // Hex IP representation (e.g. 0x7f.1, 0x7f000001)
+  /^\d+$/,                          // Integer IP representation (e.g. 2130706433)
+  /^0[0-7]+/,                       // Octal IP representation
 ];
 
 /**
@@ -50,7 +54,6 @@ function validateCompanyUrl(raw) {
 
   let parsed;
   try {
-    // Prepend https:// if no scheme so the URL constructor works
     const normalised = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
     parsed = new URL(normalised);
   } catch {
@@ -62,14 +65,18 @@ function validateCompanyUrl(raw) {
     return `URL scheme "${parsed.protocol}" is not allowed. Use https://.`;
   }
 
-  const host = parsed.hostname.toLowerCase();
+  let host = parsed.hostname.toLowerCase();
+  // Strip brackets from IPv6 hostnames like "[::1]" -> "::1"
+  if (host.startsWith('[') && host.endsWith(']')) {
+    host = host.slice(1, -1);
+  }
 
-  // Block bare IPv4 addresses entirely (not just private ones)
+  // Block bare IPv4 / IP addresses entirely (not just private ones)
   if (/^\d+\.\d+\.\d+\.\d+$/.test(host)) {
     return 'IP addresses are not allowed. Please enter a public domain name.';
   }
 
-  // Block known private/internal hostnames and IP ranges
+  // Block known private/internal hostnames and IP ranges (including hex/octal/IPv6)
   for (const pattern of PRIVATE_IP_PATTERNS) {
     if (pattern.test(host)) {
       return 'Private, loopback, or internal URLs are not allowed.';
