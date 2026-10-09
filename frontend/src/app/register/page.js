@@ -23,7 +23,6 @@ export default function RegisterPage() {
     e.preventDefault();
     setError('');
     setIsSubmitting(true);
-
     try {
       await register(name, email, password);
       router.push('/dashboard');
@@ -35,16 +34,18 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="max-w-sm mx-auto py-16 px-4 font-sans text-slate-900">
-      <div className="bg-white border border-slate-200 rounded-xl p-8 shadow-sm space-y-6">
+    <div className="max-w-sm mx-auto py-16 px-4 font-sans text-slate-900 dark:text-slate-100">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-8 shadow-sm space-y-6">
+
+        {/* Brand */}
         <div className="text-center space-y-2">
           <div className="w-9 h-9 rounded-lg bg-blue-600 text-white flex items-center justify-center mx-auto shadow-md shadow-blue-500/20">
             <Sparkles className="w-5 h-5" />
           </div>
-          <h1 className="text-xl font-bold font-serif text-slate-900 tracking-tight">
+          <h1 className="text-xl font-bold font-serif text-slate-900 dark:text-slate-100 tracking-tight">
             Create Account
           </h1>
-          <p className="text-xs font-mono text-slate-500">
+          <p className="text-xs font-mono text-slate-500 dark:text-slate-400">
             Build structured, company-tailored prep kits.
           </p>
         </div>
@@ -60,7 +61,6 @@ export default function RegisterPage() {
             required
             placeholder="Jane Doe"
           />
-
           <Input
             label="Email"
             type="email"
@@ -69,7 +69,6 @@ export default function RegisterPage() {
             required
             placeholder="jane@example.com"
           />
-
           <Input
             label="Password"
             type="password"
@@ -79,21 +78,14 @@ export default function RegisterPage() {
             minLength={6}
             placeholder="••••••••"
           />
-
-          <Button
-            type="submit"
-            variant="primary"
-            size="md"
-            loading={isSubmitting}
-            className="w-full"
-          >
+          <Button type="submit" variant="primary" size="md" loading={isSubmitting} className="w-full">
             Create Account
           </Button>
         </form>
 
-        <div className="pt-2 text-center text-xs font-mono text-slate-500 border-t border-slate-200">
+        <div className="pt-2 text-center text-xs font-mono text-slate-500 dark:text-slate-400 border-t border-slate-200 dark:border-slate-700">
           <span>Already have an account? </span>
-          <Link href="/login" className="font-semibold text-blue-600 hover:underline">
+          <Link href="/login" className="font-semibold text-blue-600 dark:text-blue-400 hover:underline">
             Sign In
           </Link>
         </div>
