@@ -1,0 +1,14 @@
+[
+  {
+    "id": "fullstack-eng-01",
+    "company_url": "https://example.com",
+    "jd": "We are seeking a Senior Full-Stack Engineer skilled in React, Node.js, TypeScript, PostgreSQL, and AWS. Responsibilities include building scalable web applications, designing RESTful APIs, optimizing database queries, and leading system architecture discussions. Candidates must have at least 5 years of professional web development experience and strong communication skills.",
+    "days": 5
+  },
+  {
+    "id": "backend-architect-02",
+    "company_url": "https://example.org",
+    "jd": "Looking for a Backend Systems Architect with deep expertise in Golang or Node.js, Distributed Systems, Redis caching, microservices, and Docker/Kubernetes container orchestration. Must be able to design high-throughput fault-tolerant APIs.",
+    "days": 7
+  }
+]

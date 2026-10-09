@@ -1,0 +1,21 @@
+{
+  "name": "trao-interview-prep-kit",
+  "version": "1.0.0",
+  "description": "AI Interview Prep Kit - Full-Stack Engineering Assessment",
+  "main": "backend/src/server.js",
+  "scripts": {
+    "start": "node backend/src/server.js",
+    "backend": "node backend/src/server.js",
+    "frontend": "npm --prefix frontend run dev",
+    "dev": "concurrently \"npm run backend\" \"npm run frontend\"",
+    "evaluate": "node backend/src/evaluation/evaluate.js",
+    "test": "vitest run --dir backend/tests"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {},
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
